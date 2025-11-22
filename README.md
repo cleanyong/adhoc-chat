@@ -1,2 +1,8 @@
 # AdHoc Chat · 一次性聊天室
 创建临时房间，生成链接发给 Bob，限制 2 人，第三人将被拒绝。
+
+
+# I deployed one here:
+尬聊 AdHoc Chat · 一次性聊天室
+
+https://galiao.cleanyong.familybankbank.com/
