@@ -59,7 +59,7 @@ async fn main() {
     let state = AppState {
         rooms: Arc::new(Mutex::new(HashMap::new())),
         public_base: std::env::var("PUBLIC_BASE")
-            .unwrap_or_else(|_| "https://adhocchat.cleanyong.familybankbank.com".to_string()),
+            .unwrap_or_else(|_| "https://galiao.cleanyong.familybankbank.com".to_string()),
     };
 
     tokio::spawn(cleanup_task(state.clone()));
