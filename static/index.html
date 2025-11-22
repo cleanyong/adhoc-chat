@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AdHoc Chat</title>
+  <style>
+    :root { color-scheme: light; font-family: 'Inter', system-ui, -apple-system, sans-serif; background: #0d1117; color: #e6edf3; }
+    body { margin: 0; min-height: 100vh; display: flex; justify-content: center; align-items: flex-start; }
+    .shell { width: min(960px, 92vw); margin-top: 36px; background: linear-gradient(145deg, #0f172a 0%, #111827 55%, #0f172a 100%); border: 1px solid #1f2937; border-radius: 16px; padding: 28px; box-shadow: 0 20px 50px rgba(0,0,0,0.35); }
+    h1 { margin: 0 0 10px; font-size: 28px; }
+    p { color: #9ca3af; margin-top: 0; }
+    input, button { font: inherit; }
+    input { width: 100%; background: #0b1220; border: 1px solid #1f2937; color: #e6edf3; padding: 10px 12px; border-radius: 10px; }
+    button { cursor: pointer; border: none; border-radius: 10px; padding: 12px 16px; font-weight: 600; transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.25s ease; }
+    button.primary { background: linear-gradient(135deg, #06b6d4, #6366f1); color: #0c0c0c; box-shadow: 0 12px 30px rgba(6,182,212,0.25); }
+    button.secondary { background: #111827; color: #e5e7eb; border: 1px solid #1f2937; }
+    button:disabled { opacity: 0.6; cursor: not-allowed; box-shadow: none; }
+    button:hover:not(:disabled) { transform: translateY(-1px); }
+    .card { margin-top: 20px; border: 1px solid #1f2937; border-radius: 12px; padding: 14px; background: #0b1220; }
+    .secret-box { font-size: 16px; letter-spacing: 0.4px; padding: 12px; border-radius: 12px; background: #020617; border: 1px solid #1f2937; word-break: break-all; }
+    .row { display: flex; gap: 10px; }
+    .row > * { flex: 1; }
+    .muted { color: #9ca3af; font-size: 14px; }
+    .status { margin: 14px 0; padding: 10px 12px; border-radius: 10px; border: 1px solid #1f2937; background: rgba(125, 211, 252, 0.08); color: #7dd3fc; }
+    .error { background: rgba(248, 113, 113, 0.1); color: #fecaca; border-color: rgba(248, 113, 113, 0.5); }
+    .messages { height: 360px; overflow-y: auto; padding: 10px; border-radius: 12px; border: 1px solid #1f2937; background: #0b1220; display: flex; flex-direction: column; gap: 6px; }
+    .msg { padding: 8px 10px; border-radius: 10px; background: #111827; max-width: 75%; align-self: flex-start; }
+    .msg.me { background: rgba(99, 102, 241, 0.2); border: 1px solid rgba(99, 102, 241, 0.4); align-self: flex-end; text-align: left; }
+    .msg .meta { color: #9ca3af; font-size: 12px; margin-bottom: 2px; }
+    .msg .body { white-space: pre-wrap; word-break: break-word; }
+  </style>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script>
+    const { useState, useEffect, useMemo, useRef } = React;
+
+    const api = {
+      async createRoom() {
+        const res = await fetch('/api/rooms', { method: 'POST' });
+        if (!res.ok) throw new Error('failed');
+        return res.json();
+      }
+    };
+
+    const copyWithFlash = async (text, setter) => {
+      try { await navigator.clipboard.writeText(text); } catch (_) {}
+      setter(true); setTimeout(() => setter(false), 1000);
+    };
+
+    function prettyMaybeJson(text) {
+      try {
+        const parsed = JSON.parse(text);
+        if (parsed && typeof parsed === 'object') {
+          return JSON.stringify(parsed, null, 2);
+        }
+      } catch (_) {}
+      return text;
+    }
+
+    function Home() {
+      const [room, setRoom] = useState(null);
+      const [loading, setLoading] = useState(false);
+      const [copied, setCopied] = useState(false);
+
+      const create = async () => {
+        setLoading(true);
+        try {
+          const data = await api.createRoom();
+          setRoom(data);
+        } finally { setLoading(false); }
+      };
+
+      return React.createElement('div', null,
+        React.createElement('h1', null, 'AdHoc Chat · 一次性聊天室'),
+        React.createElement('p', null, '创建临时房间，生成链接发给 Bob，限制 2 人，第三人将被拒绝。'),
+        React.createElement('button', { className: 'primary', onClick: create, disabled: loading }, loading ? '创建中…' : '创建房间'),
+        room && React.createElement('div', { className: 'card' },
+          React.createElement('div', { className: 'muted' }, '房间链接（分享给 Bob）：'),
+          React.createElement('div', { className: 'secret-box' }, room.url),
+          React.createElement('div', { className: 'row', style: { marginTop: 10 } },
+            React.createElement('button', { className: 'secondary', style: copied ? { background: '#16a34a', color: '#0c0c0c', borderColor: '#15803d' } : {}, onClick: () => copyWithFlash(room.url, setCopied) }, copied ? 'Copied' : '复制链接'),
+            React.createElement('a', { className: 'primary', href: `/r/${room.room_id}`, style: { textAlign: 'center', textDecoration: 'none', padding: '12px 16px' } }, '进入房间')
+          )
+        )
+      );
+    }
+
+    function Room({ roomId }) {
+      const [name, setName] = useState('');
+      const [myName, setMyName] = useState('');
+      const [connected, setConnected] = useState(false);
+      const [ws, setWs] = useState(null);
+      const [messages, setMessages] = useState([]);
+      const [input, setInput] = useState('');
+      const [error, setError] = useState('');
+      const bottomRef = useRef(null);
+
+      useEffect(() => {
+        if (bottomRef.current) bottomRef.current.scrollIntoView({ behavior: 'smooth' });
+      }, [messages]);
+
+      const connect = () => {
+        const display = name.trim() || randomName();
+        setMyName(display);
+        const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+        const socket = new WebSocket(`${proto}://${location.host}/ws/${roomId}?name=${encodeURIComponent(display)}`);
+
+        socket.onopen = () => { setConnected(true); setError(''); };
+        socket.onclose = (ev) => { setConnected(false); if (ev.code === 1008 || ev.code === 1003) setError('连接被拒绝，房间已满或不存在'); };
+        socket.onerror = () => { setError('连接出错'); };
+        socket.onmessage = (ev) => {
+          try {
+            const evt = JSON.parse(ev.data);
+            setMessages((prev) => [...prev, evt]);
+          } catch (_) {}
+        };
+        setWs(socket);
+      };
+
+      const send = () => {
+        if (!ws || ws.readyState !== WebSocket.OPEN) return;
+        const text = input.trim();
+        if (!text) return;
+        ws.send(JSON.stringify({ message: text }));
+        setInput('');
+      };
+
+      return React.createElement('div', null,
+        React.createElement('h1', null, '房间 ', roomId.slice(0, 8)),
+        !connected && React.createElement('div', { className: 'card' },
+          React.createElement('p', null, '输入昵称（可留空自动生成），点击加入房间。房间仅限 2 人。'),
+          React.createElement('input', { value: name, onChange: e => setName(e.target.value), placeholder: '你的昵称（可选）' }),
+          React.createElement('div', { className: 'row', style: { marginTop: 12 } },
+            React.createElement('button', { className: 'primary', onClick: connect }, '加入房间')
+          ),
+          error && React.createElement('div', { className: 'status error' }, error)
+        ),
+        connected && React.createElement('div', null,
+          React.createElement('div', { className: 'messages' },
+            messages.map((m, idx) => {
+              const mine = m.type !== 'system' && m.from === myName;
+              const display = prettyMaybeJson(m.message);
+              return React.createElement('div', { key: idx, className: `msg ${mine ? 'me' : ''}` },
+                React.createElement('div', { className: 'meta' }, m.type === 'system' ? '系统' : m.from, ' · ', new Date(m.at).toLocaleTimeString()),
+                React.createElement('div', { className: 'body' }, display)
+              );
+            }),
+            React.createElement('div', { ref: bottomRef })
+          ),
+          React.createElement('div', { className: 'row', style: { marginTop: 12 } },
+            React.createElement('input', { value: input, onChange: e => setInput(e.target.value), placeholder: '输入消息，回车发送', onKeyDown: e => { if (e.key === 'Enter') send(); } }),
+            React.createElement('button', { className: 'primary', onClick: send }, '发送')
+          )
+        )
+      );
+    }
+
+    function randomName() {
+      const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+      let out = 'user-';
+      for (let i = 0; i < 6; i++) out += chars[Math.floor(Math.random()*chars.length)];
+      return out;
+    }
+
+    function App() {
+      const roomId = useMemo(() => {
+        const parts = window.location.pathname.split('/').filter(Boolean);
+        if (parts[0] === 'r' && parts[1]) return parts[1];
+        return null;
+      }, []);
+
+      return React.createElement('div', { className: 'shell' }, roomId ? React.createElement(Room, { roomId }) : React.createElement(Home));
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
+  </script>
+</body>
+</html>
